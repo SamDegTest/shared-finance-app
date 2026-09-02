@@ -70,5 +70,33 @@ class Settings(BaseSettings):
             )
         )
 
+    # Redis & Asynchronous Job Queue Configuration
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+    REDIS_PASSWORD: str | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def redis_url(self) -> str:
+        if self.REDIS_PASSWORD:
+            return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+
+    # Storage & Presigned URLs Configuration
+    STORAGE_PROVIDER: str = "local"  # "local", "s3", "minio"
+    STORAGE_LOCAL_DIR: str = "uploads/receipts"
+    S3_BUCKET_NAME: str = "shared-finance-receipts"
+    S3_ENDPOINT_URL: str | None = None
+    S3_ACCESS_KEY: str | None = None
+    S3_SECRET_KEY: str | None = None
+    S3_REGION: str = "eu-central-1"
+    PRESIGNED_URL_EXPIRATION_SECONDS: int = 900  # 15 minuti
+    STORAGE_SIGNING_SECRET: str = "shared-finance-storage-secret-key-32-chars!"
+
+    # OpenAI & Vision AI Configuration
+    OPENAI_API_KEY: str | None = None
+    VISION_MODEL: str = "gpt-4o-mini"
+
 
 settings = Settings()
