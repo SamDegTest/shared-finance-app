@@ -1,67 +1,73 @@
-import Image from "next/image";
+import { SmartCommandBar } from "@/components/smart-input/SmartCommandBar";
 
 export default function Home() {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex w-full max-w-3xl flex-1 flex-col items-center justify-between bg-white px-16 py-32 sm:items-start dark:bg-black">
-        <Image
-          className="h-5 w-[100px] dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl leading-10 font-semibold tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
+    <div className="flex min-h-screen flex-col bg-slate-950 font-sans text-slate-100 selection:bg-indigo-500 selection:text-white">
+      {/* Navbar Header */}
+      <header className="sticky top-0 z-50 border-b border-slate-800/80 bg-slate-950/60 backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-tr from-indigo-500 to-emerald-400 font-bold text-white shadow-lg shadow-indigo-500/20">
+              S
+            </div>
+            <span className="text-base font-semibold tracking-tight text-white">
+              shared-finance-app
+            </span>
+            <span className="rounded-full border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-[11px] font-medium text-indigo-400">
+              v0.1.0-alpha
+            </span>
+          </div>
+          <div className="flex items-center gap-4 text-xs font-medium text-slate-400">
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
+              Ledger ACID Sync
+            </span>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col items-center px-4 py-8 sm:px-6 sm:py-12">
+        {/* Hero Title */}
+        <div className="mx-auto mb-6 max-w-xl text-center">
+          <h1 className="bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-3xl font-extrabold tracking-tight text-transparent sm:text-4xl">
+            Gestione Finanziaria di Coppia
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="mt-2 text-sm text-slate-400 sm:text-base">
+            Inserisci le spese parlando naturalmente. Il motore LLM calcola la
+            ripartizione 50/50 e aggiorna il bilancio in tempo reale.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="bg-foreground text-background flex h-12 w-full items-center justify-center gap-2 rounded-full px-5 transition-colors hover:bg-[#383838] md:w-[158px] dark:hover:bg-[#ccc]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="h-[14px] w-4 dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] md:w-[158px] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Smart Command Bar Component (SHBC-28) */}
+        <SmartCommandBar />
+
+        {/* Features highlight grid */}
+        <div className="mt-8 grid w-full max-w-2xl grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="rounded-xl border border-slate-800/80 bg-slate-900/60 p-4">
+            <div className="mb-1 text-lg text-indigo-400">
+              ⚡ 0-Friction OCR
+            </div>
+            <div className="text-xs leading-relaxed text-slate-400">
+              Scansiona scontrini con Vision AI e quadratura al centesimo
+              garantita.
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-800/80 bg-slate-900/60 p-4">
+            <div className="mb-1 text-lg text-emerald-400">
+              ⚖️ Net Debt Balance
+            </div>
+            <div className="text-xs leading-relaxed text-slate-400">
+              Algoritmo di debito netto istantaneo per chi deve dare quanto e a
+              chi.
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-800/80 bg-slate-900/60 p-4">
+            <div className="mb-1 text-lg text-amber-400">🧠 Smart Input</div>
+            <div className="text-xs leading-relaxed text-slate-400">
+              Dettatura naturale con mapping automatico di categorie e split.
+            </div>
+          </div>
         </div>
       </main>
     </div>
