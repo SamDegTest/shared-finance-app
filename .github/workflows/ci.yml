@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend-ci:
+    name: Frontend (Next.js) - Lint, Typecheck, Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prettier Format Check
+        run: npm run format:check
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: TypeScript Typecheck
+        run: npm run typecheck
+
+      - name: Build Next.js
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+  backend-ci:
+    name: Backend (FastAPI) - Ruff, Mypy, Pytest
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: server/requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Ruff Linter Check
+        run: ruff check .
+
+      - name: Ruff Format Check
+        run: ruff format --check .
+
+      - name: Mypy Static Type Analysis
+        run: mypy app/
+
+      - name: Run Unit Tests
+        run: pytest
