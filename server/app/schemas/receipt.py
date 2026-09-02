@@ -12,8 +12,12 @@ class ReceiptItem(BaseModel):
         gt=0, description="Prezzo totale voce in centesimi interi"
     )
     quantity: int = Field(default=1, ge=1, description="Quantità acquistata")
+    category: str | None = Field(
+        default=None,
+        description="Categoria merceologica dell'articolo (es. Alimentari, Casa)",
+    )
     category_hint: str | None = Field(
-        default=None, description="Suggerimento categoria"
+        default=None, description="Suggerimento categoria (retrocompatibilità)"
     )
 
 
@@ -33,6 +37,9 @@ class ReceiptExtractionResponse(BaseModel):
     items: list[ReceiptItem] = Field(
         default_factory=list, description="Lista singole voci"
     )
+    category_suggestion: str | None = Field(
+        default=None, description="Categoria macro suggerita per la spesa"
+    )
     tax_amount_cents: int | None = Field(
         default=None, ge=0, description="Importo IVA in centesimi"
     )
@@ -43,9 +50,13 @@ class ReceiptExtractionResponse(BaseModel):
         le=1.0,
         description="Indice di confidenza (0.0 - 1.0)",
     )
+    validation_warning: bool = Field(
+        default=False,
+        description="True se le voci differiscono dal totale di oltre 0.05€",
+    )
     validation_mismatch: bool = Field(
         default=False,
-        description="True se la somma delle voci differisce dal totale",
+        description="True se le voci differiscono dal totale",
     )
     items_sum_cents: int = Field(
         default=0, description="Somma calcolata delle singole voci"
@@ -53,14 +64,19 @@ class ReceiptExtractionResponse(BaseModel):
 
     @model_validator(mode="after")
     def check_arithmetic_consistency(self) -> Self:
-        """Verifica la quadratura tra somma voci e totale dichiarato."""
+        """Verifica la quadratura con soglia di tolleranza di 0.05€."""
         if self.items:
             calculated_sum = sum(
                 item.amount_cents * item.quantity for item in self.items
             )
             self.items_sum_cents = calculated_sum
-            self.validation_mismatch = calculated_sum != self.total_amount_cents
+            diff_cents = abs(calculated_sum - self.total_amount_cents)
+
+            # AC: se differisce di oltre 0.05€ (5 centesimi), validation_warning = True
+            self.validation_warning = diff_cents > 5
+            self.validation_mismatch = diff_cents > 0
         else:
             self.items_sum_cents = self.total_amount_cents
+            self.validation_warning = False
             self.validation_mismatch = False
         return self
