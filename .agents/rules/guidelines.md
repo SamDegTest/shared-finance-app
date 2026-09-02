@@ -26,7 +26,7 @@
 - **Zero Toy-Code:** codice production-ready, tipizzazione rigorosa (TS strict, Pydantic v2), gestione esplicita delle eccezioni e logging strutturato.
 - **Financial Integrity:** importi in **interi in centesimi** (mai float), calcolo saldi server-side con ACID, isolamento tenant `household_id`.
 - **AI Robustness:** schemi rigidi di validazione, fallback e check di quadratura scontrino.
-- **Git:** branch `feature/shared-finance-app-X-nome-task`, Conventional Commits (`feat:`, `fix:`, `refactor:`).
+- **Git & Workflow:** Ogni volta che l'utente invia un task con ID (es. `SHBC-11`), creare immediatamente il branch partendo da `develop`: `feature/<TASK_ID>-<slug>`. Commit con Conventional Commits includendo l'ID del task (es. `feat(SHBC-11): ...` oppure `feat(scope): [SHBC-11] ...`).
 
 ### C. Struttura Risposte
 1. **Analisi del Task**
