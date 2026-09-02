@@ -13,7 +13,7 @@ class SplitItemInput(BaseModel):
 
     user_id: uuid.UUID
     amount_cents: int | None = Field(default=None, ge=0)
-    percentage: Decimal | None = Field(default=None, ge=0, le=100)
+    percentage: Decimal | None = Field(default=None, ge=Decimal("0"), le=Decimal("100"))
     shares: int | None = Field(default=None, ge=1)
 
 
