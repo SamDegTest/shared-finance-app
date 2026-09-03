@@ -8,7 +8,7 @@ def test_presidio_text_pii_detection() -> None:
         "Scontrino N. 1045 - Pagamento POS Elettronico\n"
         "Carta di Credito: 5500 0000 0000 0004\n"
         "Email cliente: mario.rossi@gmail.com\n"
-        "Telefono assistenza: 333 1234567\n"
+        "Telefono assistenza: +39 333 1234567\n"
         "Codice Fiscale: RSSMRA85M01H501Z\n"
         "IBAN accredito: IT60X0542811101000000123456\n"
         "Totale: 45,50 EUR"

@@ -12,7 +12,9 @@ IBAN_REGEX = re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b", re.IGNORECASE)
 ITALIAN_FISCAL_CODE_REGEX = re.compile(
     r"\b[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]\b", re.IGNORECASE
 )
-PHONE_REGEX = re.compile(r"\b(?:\+39\s?)?(?:3\d{2}[ -]?\d{6,7})\b")
+PHONE_REGEX = re.compile(
+    r"\b(?:\+39\s?|0039\s?)?(?:3\d{2}[ -]?\d{6,7}|0\d{1,3}[ -]?\d{5,8})\b"
+)
 EMAIL_REGEX = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")
 
 
@@ -154,7 +156,7 @@ class PIIRedactionService:
                     "entity_type": "PHONE_NUMBER",
                     "start": match.start(),
                     "end": match.end(),
-                    "score": 0.85,
+                    "score": 0.98,
                 }
             )
 
