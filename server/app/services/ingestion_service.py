@@ -6,7 +6,10 @@ from datetime import UTC, datetime
 
 from app.core.storage import storage_service
 from app.schemas.ingestion import IngestionJobResponse, IngestionJobStatus
-from app.services.vision_worker import VisionWorker
+from app.services.vision_worker import (
+    GDPRRedactionFailedError,
+    VisionWorker,
+)
 
 logger = logging.getLogger("shared-finance-app.ingestion_service")
 
@@ -43,9 +46,11 @@ class IngestionService:
             # 1. Recupero byte immagine dallo storage se non già in memoria
             data_bytes = image_bytes or storage_service.read_file(storage_key)
 
-            # 2. Invocazione del Vision Worker
+            # 2. Invocazione del Vision Worker con redazione visiva PII (GDPR-Safe)
             extraction_result = await self.vision_worker.process_receipt_image(
-                data_bytes, mime_type="image/jpeg"
+                data_bytes,
+                mime_type="image/jpeg",
+                redact_pii=True,
             )
 
             # 3. Aggiornamento stato completato
@@ -61,6 +66,22 @@ class IngestionService:
                 job_id,
                 elapsed_ms,
             )
+
+        except GDPRRedactionFailedError as e:
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            logger.error(
+                "Elaborazione scontrino %s bloccata per sicurezza GDPR: %s",
+                job_id,
+                e,
+            )
+            job.status = IngestionJobStatus.FAILED
+            job.completed_at = datetime.now(UTC)
+            job.processing_time_ms = elapsed_ms
+            job.error_message = (
+                "Elaborazione interrotta per protezione privacy: "
+                "impossibile anonimizzare le informazioni personali."
+            )
+            self._jobs_store[job_id] = job
 
         except Exception as e:
             elapsed_ms = (time.perf_counter() - start_time) * 1000
