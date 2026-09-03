@@ -16,6 +16,37 @@ PHONE_REGEX = re.compile(r"\b(?:\+39\s?)?(?:3\d{2}[ -]?\d{6,7})\b")
 EMAIL_REGEX = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")
 
 
+def _filter_overlapping_entities(
+    entities: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Filtra entità sovrapposte mantenendo quelle con score e lunghezza maggiori."""
+    # Ordina prima per score (decrescente), poi per lunghezza span (decrescente)
+    sorted_by_priority = sorted(
+        entities,
+        key=lambda x: (
+            float(x.get("score", 0)),
+            int(x["end"]) - int(x["start"]),
+        ),
+        reverse=True,
+    )
+
+    non_overlapping: list[dict[str, Any]] = []
+    for candidate in sorted_by_priority:
+        c_start = int(candidate["start"])
+        c_end = int(candidate["end"])
+
+        # Controlla se si sovrappone con un'entità già selezionata a priorità più alta
+        is_overlapping = any(
+            max(c_start, int(existing["start"])) < min(c_end, int(existing["end"]))
+            for existing in non_overlapping
+        )
+        if not is_overlapping:
+            non_overlapping.append(candidate)
+
+    # Restituisce ordinate per posizione decrescente per sostituzione sicura
+    return sorted(non_overlapping, key=lambda x: int(x["start"]), reverse=True)
+
+
 class PIIRedactionService:
     """Servizio di rilevamento e oscuramento dati personali (PII)."""
 
@@ -66,25 +97,25 @@ class PIIRedactionService:
         if not text:
             return []
 
+        detected: list[dict[str, Any]] = []
+
         # 1. Analisi con Microsoft Presidio se disponibile
         if self._analyzer:
             try:
                 results = self._analyzer.analyze(text=text, language=language)
-                return [
-                    {
-                        "entity_type": res.entity_type,
-                        "start": res.start,
-                        "end": res.end,
-                        "score": res.score,
-                    }
-                    for res in results
-                ]
+                for res in results:
+                    detected.append(
+                        {
+                            "entity_type": res.entity_type,
+                            "start": res.start,
+                            "end": res.end,
+                            "score": res.score,
+                        }
+                    )
             except Exception as e:
                 logger.warning("Errore durante Presidio text analysis: %s", e)
 
-        # 2. Fallback Regex deterministico
-        detected: list[dict[str, Any]] = []
-
+        # 2. Integrazione/Fallback Regex per specificità italiane e robustezza
         for match in CREDIT_CARD_REGEX.finditer(text):
             digits = re.sub(r"\D", "", match.group())
             if 13 <= len(digits) <= 19:
@@ -137,21 +168,22 @@ class PIIRedactionService:
                 }
             )
 
-        return detected
+        # Filtra eventuali duplicati e sovrapposizioni mantenendo score più elevati
+        return _filter_overlapping_entities(detected)
 
     def anonymize_text(self, text: str, language: str = "en") -> str:
         """Sostituisce le PII rilevate con etichette di oscuramento."""
-        entities = self.analyze_text(text, language)
-        if not entities:
+        filtered_entities = self.analyze_text(text, language)
+        if not filtered_entities:
             return text
 
-        sorted_entities = sorted(entities, key=lambda x: x["start"], reverse=True)
+        # filtered_entities è già ordinato per start decrescente
         anonymized = text
-        for ent in sorted_entities:
+        for ent in filtered_entities:
             placeholder = f"<{ent['entity_type']}>"
-            anonymized = (
-                anonymized[: ent["start"]] + placeholder + anonymized[ent["end"] :]
-            )
+            s = int(ent["start"])
+            e = int(ent["end"])
+            anonymized = anonymized[:s] + placeholder + anonymized[e:]
 
         return anonymized
 

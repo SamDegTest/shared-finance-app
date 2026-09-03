@@ -3,9 +3,10 @@ from app.services.pii_redaction_service import pii_redaction_service
 
 def test_presidio_text_pii_detection() -> None:
     """Smoke test: Rilevamento entità sensibili PII (carte, email, telefoni, CF)."""
+    # 5500 0000 0000 0004 e 4000 0000 0000 0002 superano il checksum di Luhn
     sample_text = (
         "Scontrino N. 1045 - Pagamento POS Elettronico\n"
-        "Carta di Credito: 4532 1234 5678 9012\n"
+        "Carta di Credito: 5500 0000 0000 0004\n"
         "Email cliente: mario.rossi@gmail.com\n"
         "Telefono assistenza: 333 1234567\n"
         "Codice Fiscale: RSSMRA85M01H501Z\n"
@@ -25,11 +26,11 @@ def test_presidio_text_pii_detection() -> None:
 
 def test_presidio_text_anonymization() -> None:
     """Smoke test: Anonimizzazione testo con sostituzione tag di oscuramento."""
-    text = "Ricevuta inviata a laura.bianchi@test.it con carta 5355-1234-5678-9999"
+    text = "Ricevuta inviata a laura.bianchi@test.it con carta 5500-0000-0000-0004"
     anonymized = pii_redaction_service.anonymize_text(text)
 
     assert "laura.bianchi@test.it" not in anonymized
-    assert "5355-1234-5678-9999" not in anonymized
+    assert "5500-0000-0000-0004" not in anonymized
     assert "<EMAIL_ADDRESS>" in anonymized
     assert "<CREDIT_CARD>" in anonymized
 
