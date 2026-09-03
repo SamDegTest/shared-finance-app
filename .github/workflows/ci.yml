@@ -68,6 +68,11 @@ jobs:
           cache: pip
           cache-dependency-path: server/requirements-dev.txt
 
+      - name: Install System Tesseract OCR
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr libtesseract-dev tesseract-ocr-ita tesseract-ocr-eng
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -84,3 +89,29 @@ jobs:
 
       - name: Run Unit Tests
         run: pytest
+
+  docker-ci:
+    name: Docker Multi-Stage Build & Model Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Server / Worker Image (Tesseract + spaCy)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./server
+          file: ./server/Dockerfile
+          push: false
+          tags: shared-finance-backend:ci-test
+
+      - name: Build Client Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./client
+          file: ./client/Dockerfile
+          push: false
+          tags: shared-finance-frontend:ci-test
