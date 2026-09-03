@@ -6,25 +6,51 @@ from typing import Any
 
 logger = logging.getLogger("shared-finance-app.pii_redaction")
 
-# Fallback regex per PII (Carte di credito, IBAN, CF, Telefoni, Email)
-CREDIT_CARD_REGEX = re.compile(r"\b(?:\d[ -]*?){13,19}\b")
+# Pattern PII con focus su scontrini, ricevute POS e fatture italiane
+RAW_CARD_REGEX = re.compile(r"\b(?:\d[ -]*?){13,19}\b")
+MASKED_CARD_REGEX = re.compile(r"(?:\*{4}[ -]?\*{4}[ -]?\*{4}[ -]?\d{4}|\*{6,12}\d{4})")
 IBAN_REGEX = re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b", re.IGNORECASE)
 ITALIAN_FISCAL_CODE_REGEX = re.compile(
     r"\b[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]\b", re.IGNORECASE
 )
-PHONE_REGEX = re.compile(
-    r"\b(?:\+39\s?|0039\s?)?(?:3\d{2}[ -]?\d{6,7}|0\d{1,3}[ -]?\d{5,8})\b"
+# Telefoni Italiani: Cellulari (3xx), Fissi (0xx), Numero Verde (800)
+ITALIAN_PHONE_REGEX = re.compile(
+    r"(?:(?:\+39|0039)[\s./-]?)?(?:(?:3[1-9]\d[\s./-]?\d{3}[\s./-]?\d{3,4})|(?:0\d{1,3}[\s./-]?\d{5,8})|(?:800[\s./-]?\d{3}[\s./-]?\d{3}))\b"
 )
 EMAIL_REGEX = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")
+
+
+def _is_luhn_valid(candidate: str) -> bool:
+    """Verifica il checksum di Luhn per le carte di credito."""
+    digits = [int(c) for c in candidate if c.isdigit()]
+    if len(digits) < 13 or len(digits) > 19:
+        return False
+    checksum = 0
+    reverse_digits = digits[::-1]
+    for i, digit in enumerate(reverse_digits):
+        val = digit * 2 if i % 2 == 1 else digit
+        if val > 9:
+            val -= 9
+        checksum += val
+    return checksum % 10 == 0
 
 
 def _filter_overlapping_entities(
     entities: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Filtra entità sovrapposte mantenendo quelle con score e lunghezza maggiori."""
-    # Ordina prima per score (decrescente), poi per lunghezza span (decrescente)
+    """Filtra entità sovrapposte mantenendo quelle a priorità più elevata."""
+    # Normalizza eventuali entità straniere duplicate
+    normalized: list[dict[str, Any]] = []
+    for ent in entities:
+        item = dict(ent)
+        if item.get("entity_type") == "UK_NHS":
+            item["entity_type"] = "PHONE_NUMBER"
+            item["score"] = 0.95
+        normalized.append(item)
+
+    # Ordina per score (decrescente), poi per lunghezza span (decrescente)
     sorted_by_priority = sorted(
-        entities,
+        normalized,
         key=lambda x: (
             float(x.get("score", 0)),
             int(x["end"]) - int(x["start"]),
@@ -37,7 +63,6 @@ def _filter_overlapping_entities(
         c_start = int(candidate["start"])
         c_end = int(candidate["end"])
 
-        # Controlla se si sovrappone con un'entità già selezionata a priorità più alta
         is_overlapping = any(
             max(c_start, int(existing["start"])) < min(c_end, int(existing["end"]))
             for existing in non_overlapping
@@ -117,18 +142,27 @@ class PIIRedactionService:
             except Exception as e:
                 logger.warning("Errore durante Presidio text analysis: %s", e)
 
-        # 2. Integrazione/Fallback Regex per specificità italiane e robustezza
-        for match in CREDIT_CARD_REGEX.finditer(text):
-            digits = re.sub(r"\D", "", match.group())
-            if 13 <= len(digits) <= 19:
+        # 2. Riconoscitori dedicati per formati e scontrini italiani
+        for match in RAW_CARD_REGEX.finditer(text):
+            if _is_luhn_valid(match.group()):
                 detected.append(
                     {
                         "entity_type": "CREDIT_CARD",
                         "start": match.start(),
                         "end": match.end(),
-                        "score": 0.95,
+                        "score": 0.99,
                     }
                 )
+
+        for match in MASKED_CARD_REGEX.finditer(text):
+            detected.append(
+                {
+                    "entity_type": "CREDIT_CARD",
+                    "start": match.start(),
+                    "end": match.end(),
+                    "score": 0.99,
+                }
+            )
 
         for match in IBAN_REGEX.finditer(text):
             detected.append(
@@ -136,7 +170,7 @@ class PIIRedactionService:
                     "entity_type": "IBAN_CODE",
                     "start": match.start(),
                     "end": match.end(),
-                    "score": 0.90,
+                    "score": 0.99,
                 }
             )
 
@@ -150,13 +184,13 @@ class PIIRedactionService:
                 }
             )
 
-        for match in PHONE_REGEX.finditer(text):
+        for match in ITALIAN_PHONE_REGEX.finditer(text):
             detected.append(
                 {
                     "entity_type": "PHONE_NUMBER",
                     "start": match.start(),
                     "end": match.end(),
-                    "score": 0.98,
+                    "score": 0.99,
                 }
             )
 
@@ -166,11 +200,10 @@ class PIIRedactionService:
                     "entity_type": "EMAIL_ADDRESS",
                     "start": match.start(),
                     "end": match.end(),
-                    "score": 0.95,
+                    "score": 0.99,
                 }
             )
 
-        # Filtra eventuali duplicati e sovrapposizioni mantenendo score più elevati
         return _filter_overlapping_entities(detected)
 
     def anonymize_text(self, text: str, language: str = "en") -> str:
@@ -179,7 +212,6 @@ class PIIRedactionService:
         if not filtered_entities:
             return text
 
-        # filtered_entities è già ordinato per start decrescente
         anonymized = text
         for ent in filtered_entities:
             placeholder = f"<{ent['entity_type']}>"
