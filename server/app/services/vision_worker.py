@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 
 from app.schemas.receipt import ReceiptExtractionResponse, ReceiptItem
+from app.services.pii_redaction_service import pii_redaction_service
 
 logger = logging.getLogger("shared-finance-app.vision_worker")
 
@@ -23,6 +24,14 @@ Estrai i dati rispettando lo schema JSON:
 - payment_method: metodo di pagamento
 - confidence_score: float tra 0.0 e 1.0
 """
+
+
+class GDPRSafeProcessingError(Exception):
+    """Eccezione base per violazioni o errori di conformità privacy GDPR."""
+
+
+class GDPRRedactionFailedError(GDPRSafeProcessingError):
+    """Sollevata se la redazione fallisce per prevenire data leakage."""
 
 
 class BaseVisionProvider(ABC):
@@ -113,6 +122,7 @@ class MockVisionProvider(BaseVisionProvider):
         canned_response: ReceiptExtractionResponse | None = None,
     ) -> None:
         self.canned_response = canned_response
+        self.last_received_image_bytes: bytes | None = None
 
     def set_canned_response(self, response: ReceiptExtractionResponse) -> None:
         self.canned_response = response
@@ -125,10 +135,12 @@ class MockVisionProvider(BaseVisionProvider):
         if not image_bytes:
             raise ValueError("I byte dell'immagine non possono essere vuoti.")
 
+        self.last_received_image_bytes = image_bytes
+
         if self.canned_response:
             return self.canned_response
 
-        # Risposta di default standard
+        # Risposta di default standard con dati finanziari intatti
         return ReceiptExtractionResponse(
             merchant_name="Supermercato Esempio",
             expense_date=date.today(),
@@ -168,7 +180,7 @@ class MockVisionProvider(BaseVisionProvider):
 
 
 class VisionWorker:
-    """Worker di elaborazione e parsing immagini scontrini."""
+    """Worker di elaborazione e parsing immagini scontrini con privacy guard."""
 
     def __init__(self, provider: BaseVisionProvider | None = None) -> None:
         self.provider = provider or MockVisionProvider()
@@ -177,23 +189,45 @@ class VisionWorker:
         self,
         image_bytes: bytes,
         mime_type: str = "image/jpeg",
+        redact_pii: bool = True,
     ) -> ReceiptExtractionResponse:
-        """Elabora l'immagine e restituisce i dati estratti con validazione."""
+        """Elabora l'immagine oscurando prima le PII e validando i dati estratti."""
         if not image_bytes:
             raise ValueError("Immagine ricevuta non valida o vuota.")
 
+        # 1. Fase di Anonimizzazione Visiva PII (GDPR-Safe)
+        payload_bytes = image_bytes
+        if redact_pii:
+            try:
+                logger.info(
+                    "Avvio mascheramento visivo PII su scontrino (%d bytes)...",
+                    len(image_bytes),
+                )
+                payload_bytes = pii_redaction_service.redact_receipt_image(image_bytes)
+                if not payload_bytes:
+                    raise GDPRRedactionFailedError(
+                        "L'immagine anonimizzata risulta vuota."
+                    )
+            except GDPRSafeProcessingError:
+                raise
+            except Exception as e:
+                logger.exception("Fallimento durante la redazione PII: %s", e)
+                raise GDPRRedactionFailedError(
+                    f"Anonimizzazione PII fallita: {e}. Invio al Vision LLM "
+                    "interrotto per protezione privacy GDPR."
+                ) from e
+
+        # 2. Inoltro esclusivo dell'immagine anonimizzata al Vision LLM
         logger.info(
-            "Avvio elaborazione scontrino (%d bytes, mime: %s)...",
-            len(image_bytes),
-            mime_type,
+            "Inoltro scontrino anonimizzato al Vision Provider (%d bytes)...",
+            len(payload_bytes),
         )
-        extraction = await self.provider.extract_receipt(image_bytes, mime_type)
+        extraction = await self.provider.extract_receipt(payload_bytes, mime_type)
 
         logger.info(
-            "Completato: '%s', tot=%d (warn=%s, mism=%s)",
+            "Estrazione completata: '%s', totale=%d (warn=%s)",
             extraction.merchant_name,
             extraction.total_amount_cents,
             extraction.validation_warning,
-            extraction.validation_mismatch,
         )
         return extraction
