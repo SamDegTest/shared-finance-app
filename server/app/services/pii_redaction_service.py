@@ -1,27 +1,8 @@
+import importlib
 import io
 import logging
 import re
 from typing import Any
-
-try:
-    import presidio_analyzer  # type: ignore
-except ImportError:
-    presidio_analyzer = None
-
-try:
-    import presidio_image_redactor  # type: ignore
-except ImportError:
-    presidio_image_redactor = None
-
-try:
-    import pytesseract  # type: ignore
-except ImportError:
-    pytesseract = None
-
-try:
-    import PIL.Image  # type: ignore
-except ImportError:
-    PIL = None
 
 logger = logging.getLogger("shared-finance-app.pii_redaction")
 
@@ -45,31 +26,33 @@ class PIIRedactionService:
 
     def _init_presidio_engines(self) -> None:
         """Inizializza Microsoft Presidio se disponibile nell'ambiente."""
-        if presidio_analyzer is not None:
-            try:
-                self._analyzer = presidio_analyzer.AnalyzerEngine()
-                logger.info("Presidio AnalyzerEngine inizializzato con successo.")
-            except Exception as e:
-                logger.warning("Errore inizializzazione Presidio AnalyzerEngine: %s", e)
-                self._analyzer = None
+        try:
+            mod_analyzer = importlib.import_module("presidio_analyzer")
+            self._analyzer = mod_analyzer.AnalyzerEngine()
+            logger.info("Presidio AnalyzerEngine inizializzato con successo.")
+        except Exception as e:
+            logger.warning(
+                "Presidio AnalyzerEngine non disponibile, uso fallback: %s",
+                e,
+            )
+            self._analyzer = None
 
-        if presidio_image_redactor is not None:
-            try:
-                self._image_redactor = presidio_image_redactor.ImageRedactorEngine()
-                logger.info("Presidio ImageRedactorEngine inizializzato.")
-            except Exception as e:
-                logger.warning(
-                    "Errore inizializzazione Presidio ImageRedactorEngine: %s",
-                    e,
-                )
-                self._image_redactor = None
+        try:
+            mod_redactor = importlib.import_module("presidio_image_redactor")
+            self._image_redactor = mod_redactor.ImageRedactorEngine()
+            logger.info("Presidio ImageRedactorEngine inizializzato.")
+        except Exception as e:
+            logger.warning(
+                "Presidio ImageRedactorEngine non disponibile, uso fallback: %s",
+                e,
+            )
+            self._image_redactor = None
 
     def is_ocr_available(self) -> bool:
         """Verifica se il motore Tesseract OCR è raggiungibile a livello OS."""
-        if pytesseract is None:
-            return False
         try:
-            version = pytesseract.get_tesseract_version()
+            mod_tesseract = importlib.import_module("pytesseract")
+            version = mod_tesseract.get_tesseract_version()
             return version is not None
         except Exception:
             return False
@@ -177,9 +160,10 @@ class PIIRedactionService:
         if not image_bytes:
             return image_bytes
 
-        if self._image_redactor and self.is_ocr_available() and PIL is not None:
+        if self._image_redactor and self.is_ocr_available():
             try:
-                image = PIL.Image.open(io.BytesIO(image_bytes))
+                mod_pil = importlib.import_module("PIL.Image")
+                image = mod_pil.open(io.BytesIO(image_bytes))
                 redacted_image = self._image_redactor.redact(image, fill=(0, 0, 0))
 
                 output = io.BytesIO()
