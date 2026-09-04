@@ -87,6 +87,9 @@ class Settings(BaseSettings):
     STORAGE_PROVIDER: str = "local"  # "local", "s3", "minio"
     STORAGE_LOCAL_DIR: str = "uploads/receipts"
     S3_BUCKET_NAME: str = "shared-finance-receipts"
+    S3_RAW_BUCKET_NAME: str = "shbc-raw-receipts"
+    S3_REDACTED_BUCKET_NAME: str = "shbc-redacted-receipts"
+    S3_LIFECYCLE_EXPIRATION_DAYS: int = 1
     S3_ENDPOINT_URL: str | None = None
     S3_ACCESS_KEY: str | None = None
     S3_SECRET_KEY: str | None = None

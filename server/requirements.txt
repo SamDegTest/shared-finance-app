@@ -15,3 +15,4 @@ pytesseract>=0.3.10
 spacy>=3.7.0
 presidio-analyzer>=2.2.355
 presidio-image-redactor>=0.0.55
+boto3>=1.35.0
