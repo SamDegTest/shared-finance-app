@@ -83,14 +83,7 @@ def process_receipt(
 
     # 4. Invio ESCLUSIVO dell'immagine anonimizzata al Vision LLM
     worker = VisionWorker()
-
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    extraction = loop.run_until_complete(
+    extraction = asyncio.run(
         worker.process_receipt_image(
             image_bytes=redacted_image_bytes,
             mime_type="image/jpeg",
