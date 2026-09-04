@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.core.config import settings
+from app.core.middleware import AuditLoggingMiddleware
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,6 +29,9 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     lifespan=lifespan,
 )
+
+# Registra middleware asincrono di audit logging GDPR
+app.add_middleware(AuditLoggingMiddleware)
 
 # Set all CORS enabled origins
 if settings.BACKEND_CORS_ORIGINS:
