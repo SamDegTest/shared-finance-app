@@ -1,9 +1,10 @@
 import uuid
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from app.models.expense import SplitType
 from app.schemas.expense import SplitItemInput
+from app.utils.finance import calculate_precise_splits_cents
 
 
 @dataclass(frozen=True)
@@ -19,22 +20,19 @@ def _calculate_equal_splits(
     participant_ids: list[uuid.UUID],
     payer_id: uuid.UUID | None,
 ) -> list[CalculatedSplit]:
-    """Suddivide l'importo equamente, gestendo il resto dispari dei centesimi."""
-    n = len(participant_ids)
-    base = total_amount_cents // n
-    remainder = total_amount_cents % n
-
-    # Ordina i partecipanti mettendo per primo il pagatore se presente
-    sorted_participants = sorted(
-        participant_ids,
-        key=lambda uid: (uid != payer_id, str(uid)),
+    """Suddivide l'importo equamente, allocando deterministicamente il resto."""
+    splits_cents = calculate_precise_splits_cents(
+        total_cents=total_amount_cents,
+        participant_ids=participant_ids,
+        payer_id=payer_id,
     )
 
     results: list[CalculatedSplit] = []
-    for idx, uid in enumerate(sorted_participants):
-        extra = 1 if idx < remainder else 0
-        allocated = base + extra
-        pct = Decimal(f"{(allocated / total_amount_cents) * 100:.2f}")
+    for uid in participant_ids:
+        allocated = splits_cents[uid]
+        pct = (
+            (Decimal(allocated) / Decimal(total_amount_cents)) * Decimal("100")
+        ).quantize(Decimal("0.01"))
         results.append(
             CalculatedSplit(
                 user_id=uid,
@@ -50,7 +48,7 @@ def _calculate_percentage_splits(
     participant_ids: list[uuid.UUID],
     custom_splits: list[SplitItemInput],
 ) -> list[CalculatedSplit]:
-    """Calcola le quote in base a percentuali custom con correzione arrotondamenti."""
+    """Calcola le quote in base a percentuali con precisione Decimal (Zero-Float)."""
     split_map = {s.user_id: s for s in custom_splits}
     missing = set(participant_ids) - set(split_map.keys())
     if missing:
@@ -65,11 +63,15 @@ def _calculate_percentage_splits(
             f"(attuale: {total_pct}%)."
         )
 
-    # Calcolo preliminare
+    # Calcolo preliminare con aritmetica Decimal pura
     calculated: list[tuple[uuid.UUID, int, Decimal]] = []
     for uid in participant_ids:
         pct = split_map[uid].percentage or Decimal("0")
-        allocated = round(total_amount_cents * float(pct / Decimal("100")))
+        allocated = int(
+            (Decimal(total_amount_cents) * pct / Decimal("100")).quantize(
+                Decimal("1"), rounding=ROUND_HALF_UP
+            )
+        )
         calculated.append((uid, allocated, pct))
 
     # Aggiustamento centesimi di scarto
@@ -111,7 +113,9 @@ def _calculate_exact_splits(
     results: list[CalculatedSplit] = []
     for uid in participant_ids:
         amt = split_map[uid].amount_cents or 0
-        pct = Decimal(f"{(amt / total_amount_cents) * 100:.2f}")
+        pct = ((Decimal(amt) / Decimal(total_amount_cents)) * Decimal("100")).quantize(
+            Decimal("0.01")
+        )
         results.append(
             CalculatedSplit(
                 user_id=uid,
@@ -149,7 +153,9 @@ def _calculate_shares_splits(
     for idx, (uid, amt, sh) in enumerate(allocated_list):
         extra = 1 if idx < remainder else 0
         final_amt = amt + extra
-        pct = Decimal(f"{(final_amt / total_amount_cents) * 100:.2f}")
+        pct = (
+            (Decimal(final_amt) / Decimal(total_amount_cents)) * Decimal("100")
+        ).quantize(Decimal("0.01"))
         results.append(
             CalculatedSplit(
                 user_id=uid,
