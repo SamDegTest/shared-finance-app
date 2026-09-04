@@ -3,6 +3,7 @@ import logging
 from typing import Any
 
 from app.core.celery_app import celery_app
+from app.core.config import settings
 from app.core.storage import storage_service
 from app.services.pii_redaction_service import pii_redaction_service
 from app.services.vision_worker import (
@@ -19,7 +20,7 @@ def process_receipt(
     storage_key: str,
     household_id: str,
 ) -> dict[str, Any]:
-    """Task asincrono Celery per scontrini con redazione visiva PII."""
+    """Task asincrono Celery con redazione visiva ed eliminazione sicura."""
     logger.info(
         "Avvio task Celery process_receipt: job=%s, key=%s, household=%s",
         job_id,
@@ -29,9 +30,13 @@ def process_receipt(
 
     # 1. Download dell'immagine originale da S3 / Storage locale
     try:
-        raw_image_bytes = storage_service.read_file(storage_key)
+        raw_image_bytes = storage_service.read_file(
+            storage_key=storage_key,
+            bucket_name=settings.S3_RAW_BUCKET_NAME,
+        )
     except Exception as e:
         logger.exception("Impossibile scaricare lo scontrino da storage: %s", e)
+        # Il file raw rimane nello storage per consentire retry automatici
         raise RuntimeError(
             f"Errore lettura storage per la chiave '{storage_key}': {e}"
         ) from e
@@ -54,12 +59,29 @@ def process_receipt(
             job_id,
             e,
         )
+        # In caso di errore PII, conserviamo per retry/investigazione
         raise GDPRRedactionFailedError(
             f"Anonimizzazione visiva fallita: {e}. Elaborazione interrotta "
             "per garantire la riservatezza dei dati dell'utente."
         ) from e
 
-    # 3. Invio ESCLUSIVO dell'immagine anonimizzata al Vision LLM
+    # 3. Salvataggio immagine oscurata nel bucket shbc-redacted-receipts
+    try:
+        redacted_key = storage_service.save_redacted_receipt(
+            storage_key=storage_key,
+            data=redacted_image_bytes,
+        )
+        logger.info(
+            "Immagine oscurata salvata nel bucket di destinazione: %s",
+            redacted_key,
+        )
+    except Exception as e:
+        logger.warning(
+            "Impossibile salvare immagine oscurata in storage: %s",
+            e,
+        )
+
+    # 4. Invio ESCLUSIVO dell'immagine anonimizzata al Vision LLM
     worker = VisionWorker()
 
     try:
@@ -76,8 +98,29 @@ def process_receipt(
         )
     )
 
+    # 5. Eliminazione Sicura Immediata dello Scontrino Raw (GDPR Art. 5)
+    try:
+        storage_service.delete_file(
+            storage_key=storage_key,
+            bucket_name=settings.S3_RAW_BUCKET_NAME,
+        )
+        logger.info(
+            "Scontrino raw eliminato con successo per GDPR Art. 5: "
+            "job=%s, key=%s, bucket=%s",
+            job_id,
+            storage_key,
+            settings.S3_RAW_BUCKET_NAME,
+        )
+    except Exception as e:
+        logger.error(
+            "Avviso: eliminazione immediata scontrino raw fallita (%s): %s. "
+            "La Lifecycle Policy S3 eliminerà il file orfano.",
+            storage_key,
+            e,
+        )
+
     logger.info(
-        "Task process_receipt completato per job %s (esercente: %s, tot: %d)",
+        "process_receipt completato per job %s (esercente: %s, tot: %d)",
         job_id,
         extraction.merchant_name,
         extraction.total_amount_cents,
