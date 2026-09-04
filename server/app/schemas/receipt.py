@@ -4,6 +4,10 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
+class ValidationMismatchError(Exception):
+    """Sollevata quando la risposta dell'LLM viola lo schema o non è conforme."""
+
+
 class ReceiptItem(BaseModel):
     model_config = ConfigDict(frozen=True)
 
