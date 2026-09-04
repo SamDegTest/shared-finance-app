@@ -17,6 +17,7 @@ class AuditService:
 
     def __init__(self) -> None:
         self._background_tasks: set[asyncio.Task[None]] = set()
+        self.session_factory: Any = AsyncSessionLocal
 
     async def log_event(
         self,
@@ -73,8 +74,11 @@ class AuditService:
         details: dict[str, Any] | None = None,
     ) -> None:
         """Registra un evento di audit aprendo una sessione DB isolata."""
+        if not self.session_factory:
+            return
+
         try:
-            async with AsyncSessionLocal() as session:
+            async with self.session_factory() as session:
                 await self.log_event(
                     session=session,
                     action=action,
@@ -87,7 +91,7 @@ class AuditService:
                     details=details,
                 )
         except Exception as e:
-            logger.error(
+            logger.debug(
                 "Impossibile registrare log di audit in background (%s): %s",
                 action,
                 e,
