@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from app.core.storage import storage_service
 from app.schemas.ingestion import IngestionJobResponse, IngestionJobStatus
+from app.schemas.receipt import ValidationMismatchError
 from app.services.vision_worker import (
     GDPRRedactionFailedError,
     VisionWorker,
@@ -81,6 +82,19 @@ class IngestionService:
                 "Elaborazione interrotta per protezione privacy: "
                 "impossibile anonimizzare le informazioni personali."
             )
+            self._jobs_store[job_id] = job
+
+        except ValidationMismatchError as e:
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            logger.error(
+                "Elaborazione scontrino %s fallita per validation_mismatch: %s",
+                job_id,
+                e,
+            )
+            job.status = IngestionJobStatus.FAILED
+            job.completed_at = datetime.now(UTC)
+            job.processing_time_ms = elapsed_ms
+            job.error_message = f"validation_mismatch: {e}"
             self._jobs_store[job_id] = job
 
         except Exception as e:

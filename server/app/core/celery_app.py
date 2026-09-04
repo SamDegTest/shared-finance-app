@@ -26,9 +26,25 @@ try:
     )
 except Exception:
 
+    class _DummyTask:
+        name = "dummy_task"
+        request = type("DummyRequest", (), {"retries": 0, "id": "dummy-task-id"})()
+
+        def retry(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
     class _DummyCelery:
-        def task(self, *_args: Any, **_kwargs: Any) -> Callable[[F], F]:
+        def task(self, *_args: Any, **kwargs: Any) -> Callable[[F], F]:
+            bind = kwargs.get("bind", False)
+
             def decorator(fn: F) -> F:
+                if bind:
+
+                    def wrapper(*f_args: Any, **f_kwargs: Any) -> Any:
+                        return fn(_DummyTask(), *f_args, **f_kwargs)
+
+                    wrapper.__name__ = getattr(fn, "__name__", "wrapper")
+                    return wrapper  # type: ignore[return-value]
                 return fn
 
             return decorator

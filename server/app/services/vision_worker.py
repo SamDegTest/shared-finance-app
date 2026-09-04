@@ -7,7 +7,11 @@ from typing import Any
 
 import httpx
 
-from app.schemas.receipt import ReceiptExtractionResponse, ReceiptItem
+from app.schemas.receipt import (
+    ReceiptExtractionResponse,
+    ReceiptItem,
+    ValidationMismatchError,
+)
 from app.services.pii_redaction_service import pii_redaction_service
 
 logger = logging.getLogger("shared-finance-app.vision_worker")
@@ -108,10 +112,27 @@ class OpenAIVisionProvider(BaseVisionProvider):
             resp.raise_for_status()
             data = resp.json()
 
-        content = data["choices"][0]["message"]["content"]
-        raw_json: dict[str, Any] = json.loads(content)
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        if not content:
+            raise ValidationMismatchError(
+                "Risposta vuota o priva di contenuto dall'LLM."
+            )
 
-        return ReceiptExtractionResponse.model_validate(raw_json)
+        try:
+            raw_json: dict[str, Any] = json.loads(content)
+        except Exception as e:
+            logger.error("JSON malformato ricevuto da Vision LLM: %s", e)
+            raise ValidationMismatchError(
+                f"JSON malformato ricevuto dall'LLM: {e}"
+            ) from e
+
+        try:
+            return ReceiptExtractionResponse.model_validate(raw_json)
+        except Exception as e:
+            logger.error("Validazione schema Pydantic fallita per scontrino: %s", e)
+            raise ValidationMismatchError(
+                f"Lo scontrino estratto non rispetta lo schema Pydantic: {e}"
+            ) from e
 
 
 class MockVisionProvider(BaseVisionProvider):
